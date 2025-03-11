@@ -109,3 +109,108 @@ class LiteLLMKeyManager:
    - Delete chaves quando necessário
         """)
         instructions.config(state=tk.DISABLED)
+    
+    def setup_keys_tab(self, parent):
+        # Frame para criar novas chaves
+        create_frame = ttk.LabelFrame(parent, text="Criar Nova Chave")
+        create_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Formulário em grid para criar chaves
+        ttk.Label(create_frame, text="Nome da Chave:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(create_frame, textvariable=self.key_name, width=40).grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(create_frame, text="ID da Equipe (opcional):").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(create_frame, textvariable=self.team_id, width=40).grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(create_frame, text="Orçamento Máximo ($):").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Spinbox(create_frame, from_=0, to=1000, textvariable=self.max_budget, width=10).grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(create_frame, text="Expirar em (ex: 30d, 24h, 60m):").grid(row=3, column=0, sticky=tk.W, padx=5, pady=5)
+        
+        # Função de validação para permitir números e sufixos de tempo (d, h, m, s)
+        def validate_duration(input):
+            if input == "":
+                return True
+            # Aceita dígitos seguidos opcionalmente por d, h, m ou s
+            import re
+            return bool(re.match(r'^[0-9]+[dhms]?$', input))
+                
+        vcmd = (self.root.register(validate_duration), '%P')
+        ttk.Entry(create_frame, textvariable=self.expires_days, width=10, 
+                 validate="key", validatecommand=vcmd).grid(row=3, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        # Frame para os modelos
+        models_frame = ttk.LabelFrame(create_frame, text="Modelos Permitidos")
+        models_frame.grid(row=4, column=0, columnspan=2, sticky=tk.W+tk.E, padx=5, pady=10)
+        
+        # Checkbuttons para modelos
+        for i, model in enumerate(self.available_models):
+            row, col = divmod(i, 3)
+            ttk.Checkbutton(models_frame, text=model, variable=self.model_vars[model]).grid(row=row, column=col, sticky=tk.W, padx=10, pady=2)
+        
+        # Botão para criar chave
+        ttk.Button(create_frame, text="Criar Chave", command=self.create_key).grid(row=5, column=0, columnspan=2, pady=10)
+        
+        # Área para mostrar a chave criada
+        ttk.Label(create_frame, text="Chave Gerada:").grid(row=6, column=0, sticky=tk.W, padx=5, pady=5)
+        
+        self.key_result = scrolledtext.ScrolledText(create_frame, wrap=tk.WORD, width=70, height=10)
+        self.key_result.grid(row=7, column=0, columnspan=2, sticky=tk.W+tk.E, padx=5, pady=5)
+        
+    def setup_list_keys_tab(self, parent):
+        # Frame para listar chaves
+        list_frame = ttk.Frame(parent)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Botão para atualizar lista
+        ttk.Button(list_frame, text="Atualizar Lista de Chaves", command=self.list_keys).pack(pady=10)
+        
+        # Treeview para mostrar as chaves
+        columns = ('key', 'name', 'team_id', 'models', 'budget', 'spend', 'expires')
+        self.keys_tree = ttk.Treeview(list_frame, columns=columns, show='headings')
+        
+        # Configurar cabeçalhos
+        self.keys_tree.heading('key', text='Chave')
+        self.keys_tree.heading('name', text='Nome')
+        self.keys_tree.heading('team_id', text='Equipe')
+        self.keys_tree.heading('models', text='Modelos')
+        self.keys_tree.heading('budget', text='Orçamento')
+        self.keys_tree.heading('spend', text='Gasto')
+        self.keys_tree.heading('expires', text='Expira em')
+        
+        # Configurar colunas
+        self.keys_tree.column('key', width=150, anchor='w')
+        self.keys_tree.column('name', width=100, anchor='w')
+        self.keys_tree.column('team_id', width=80, anchor='w')
+        self.keys_tree.column('models', width=200, anchor='w')
+        self.keys_tree.column('budget', width=80, anchor='e')
+        self.keys_tree.column('spend', width=80, anchor='e')
+        self.keys_tree.column('expires', width=100, anchor='w')
+        
+        # Adicionar scrollbar
+        keys_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.keys_tree.yview)
+        self.keys_tree.configure(yscroll=keys_scroll.set)
+        
+        # Empacotar elementos
+        self.keys_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        keys_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Botão para revogar chave selecionada
+        ttk.Button(list_frame, text="Revogar Chave Selecionada", command=self.revoke_key).pack(pady=10)
+        
+    def test_connection(self):
+        """Testa a conexão com o servidor LiteLLM"""
+        try:
+            url = f"{self.server_url.get()}/health"
+            headers = {"Authorization": f"Bearer {self.master_key.get()}"}
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                messagebox.showinfo("Conexão", "Conexão com o servidor bem-sucedida!")
+                self.status_var.set("Conexão com o servidor estabelecida")
+            else:
+                messagebox.showerror("Erro", f"Erro ao conectar: Status {response.status_code}")
+                self.status_var.set(f"Erro de conexão: {response.status_code}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao conectar ao servidor: {str(e)}")
+            self.status_var.set(f"Erro de conexão: {str(e)}")
